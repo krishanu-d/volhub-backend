@@ -20,6 +20,7 @@ export class AuthController {
       const jwt = this.authService.generateJwt({
         sub: user.id,
         email: user.email,
+        role: user.role,
       });
       return res.send({ access_token: jwt, isNewUser, user });
     } else {
@@ -41,6 +42,7 @@ export class AuthController {
       const jwt = this.authService.generateJwt({
         sub: user.id,
         email: user.email,
+        role: user.role,
       });
       return res.send({ access_token: jwt, isNewUser, user });
     } else {

@@ -1,13 +1,17 @@
+// src/users/entities/user.entity.ts
+
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
+  OneToMany, // Make sure OneToMany is imported
 } from 'typeorm';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiHideProperty } from '@nestjs/swagger';
 import { Opportunity } from '../../opportunities/entities/opportunity.entity';
+import { Application } from '../../applications/entities/application.entity'; // <-- NEW: Import Application entity
+import { UserRole } from '../dto/update-user.dto';
 
 @Entity('users')
 export class User {
@@ -22,9 +26,20 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @ApiProperty({ description: 'The name of the user', example: 'John Doe' })
+  @ApiProperty({
+    description: 'The name of the user',
+    example: 'John Doe',
+    nullable: true,
+  })
   @Column({ nullable: true })
   name?: string;
+
+  @ApiProperty({
+    description: 'Contact information of the user',
+    nullable: true,
+  })
+  @Column({ nullable: true })
+  contactInfo?: string;
 
   @ApiProperty({
     description: 'The profile picture URL',
@@ -52,11 +67,11 @@ export class User {
 
   @ApiProperty({
     description: 'The role of the user',
-    enum: ['volunteer', 'ngo'],
-    example: 'volunteer',
+    enum: UserRole, // Use the imported UserRole enum directly here
+    example: UserRole.VOLUNTEER, // Example using the enum value
   })
-  @Column({ type: 'enum', enum: ['volunteer', 'ngo'], default: 'volunteer' })
-  role: 'volunteer' | 'ngo';
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.VOLUNTEER }) // Use the imported enum here
+  role: UserRole; // Use the imported enum type
 
   @ApiProperty({
     description: 'About section for the user/NGO',
@@ -66,12 +81,49 @@ export class User {
   @Column({ type: 'text', nullable: true })
   about?: string;
 
+  @ApiProperty({
+    description: 'Latitude of the user',
+    example: 37.7749,
+    nullable: true,
+  })
+  @Column({ type: 'float', nullable: true })
+  latitude?: number;
+
+  @ApiProperty({
+    description: 'Longitude of the user',
+    example: -122.4194,
+    nullable: true,
+  })
+  @Column({ type: 'float', nullable: true })
+  longitude?: number;
+
+  @ApiProperty({
+    description: 'Place name of the user',
+    example: 'San Francisco, CA',
+    nullable: true,
+  })
+  @Column({ nullable: true })
+  placeName?: string;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
-  @OneToMany(() => Opportunity, (opportunity) => opportunity.ngo)
-  opportunities: Opportunity[];
+  // Existing relationship for NGOs to opportunities
+  @ApiProperty({ type: () => Opportunity })
+  @OneToMany(() => Opportunity, (opportunity) => opportunity.ngo, {
+    lazy: true,
+  })
+  @ApiHideProperty()
+  opportunities: Opportunity[]; // Opportunities posted by this NGO
+
+  // <-- NEW: Relationship for Volunteers to applications -->
+  @ApiProperty({ type: () => Application })
+  @OneToMany(() => Application, (application) => application.volunteer, {
+    lazy: true,
+  })
+  @ApiHideProperty() // Hide from Swagger schema to prevent circular issues
+  applications: Application[]; // Applications made by this volunteer
 }

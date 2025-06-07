@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsOptional,
   IsNumber,
+  IsArray,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -18,10 +19,20 @@ export class CreateOpportunityDto {
   @IsString()
   description: string;
 
-  @ApiProperty({ example: 'Central Park' })
-  @IsNotEmpty()
+  @ApiProperty({ example: 37.7749, required: false })
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @ApiProperty({ example: -122.4194, required: false })
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @ApiProperty({ example: 'Golden Gate Park', required: false })
+  @IsOptional()
   @IsString()
-  location: string;
+  placeName?: string;
 
   @ApiProperty({ example: '2025-07-01T09:00:00.000Z' })
   @IsNotEmpty()
@@ -40,4 +51,15 @@ export class CreateOpportunityDto {
   @IsNotEmpty()
   @IsNumber()
   ngoId: number;
+
+  @ApiProperty({
+    description: 'Array of image URLs for the opportunity',
+    example: ['http://example.com/image1.jpg'],
+    required: false,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
 }

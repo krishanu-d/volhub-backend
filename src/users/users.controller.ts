@@ -28,6 +28,8 @@ export class UsersController {
     @Req() req,
     @Body(new ValidationPipe()) updateUserDto: UpdateUserDto,
   ): Promise<User> {
-    return this.usersService.updateUser(req.user.sub, updateUserDto); // Use req.user.sub and the generic update method
+    console.log('req.user:', req.user);
+    console.log(req.user.sub);
+    return this.usersService.updateUser(req.user.id, updateUserDto); // Use req.user.sub and the generic update method
   }
 }

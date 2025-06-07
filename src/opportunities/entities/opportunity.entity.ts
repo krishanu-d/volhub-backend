@@ -6,9 +6,11 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany, // <-- NEW: Make sure OneToMany is imported
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiHideProperty } from '@nestjs/swagger'; // <-- NEW: Import ApiHideProperty
+import { Application } from '../../applications/entities/application.entity'; // <-- NEW: Import Application entity
 
 @Entity('opportunities')
 export class Opportunity {
@@ -31,11 +33,28 @@ export class Opportunity {
   description: string;
 
   @ApiProperty({
-    description: 'The location of the opportunity',
-    example: '123 Main St, Anytown',
+    description: 'Latitude of the opportunity',
+    example: 37.7749,
+    nullable: true,
   })
-  @Column()
-  location: string;
+  @Column({ type: 'float', nullable: true })
+  latitude?: number;
+
+  @ApiProperty({
+    description: 'Longitude of the opportunity',
+    example: -122.4194,
+    nullable: true,
+  })
+  @Column({ type: 'float', nullable: true })
+  longitude?: number;
+
+  @ApiProperty({
+    description: 'Place name of the opportunity',
+    example: 'San Francisco, CA',
+    nullable: true,
+  })
+  @Column({ nullable: true })
+  placeName?: string;
 
   @ApiProperty({
     description: 'The start date of the opportunity',
@@ -52,17 +71,37 @@ export class Opportunity {
   @Column({ type: 'timestamp', nullable: true })
   endDate?: Date;
 
-  @ApiProperty({ description: 'The NGO that posted this opportunity' })
-  @ManyToOne(() => User, (user) => user.opportunities)
+  @ApiProperty({
+    description: 'The NGO that posted this opportunity',
+    type: () => User,
+  })
+  @ManyToOne(() => User, (user) => user.opportunities, { lazy: true })
   @JoinColumn({ name: 'ngoId' })
   ngo: User;
 
   @Column()
-  ngoId: number;
+  ngoId: number; // Foreign key to User (NGO)
+
+  @ApiProperty({
+    description: 'Array of image URLs for the opportunity',
+    example: ['http://example.com/image1.jpg', 'http://example.com/image2.png'],
+    nullable: true,
+    isArray: true,
+  })
+  @Column({ type: 'json', nullable: true })
+  images?: string[];
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  // <-- NEW: Relationship to Applications -->
+  @ApiProperty({ type: () => Application })
+  @OneToMany(() => Application, (application) => application.opportunity, {
+    lazy: true,
+  })
+  @ApiHideProperty() // Hide from Swagger schema to prevent circular issues
+  applications: Application[]; // Applications made for this opportunity
 }

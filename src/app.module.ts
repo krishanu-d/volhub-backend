@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { User } from './users/entities/user.entity';
 import { ConfigModule } from '@nestjs/config'; // Import ConfigModule
 import { OpportunitiesModule } from './opportunities/opportunities.module';
+import { ApplicationsModule } from './applications/applications.module';
 
 @Module({
   imports: [
@@ -22,12 +23,13 @@ import { OpportunitiesModule } from './opportunities/opportunities.module';
       password: process.env.DB_PASSWORD || '1234',
       database: process.env.DB_NAME || 'volhub_db',
       entities: [User],
-      synchronize: process.env.NODE_ENV !== 'production',
+      synchronize: true,
       autoLoadEntities: true,
     }),
     UsersModule,
     AuthModule,
     OpportunitiesModule,
+    ApplicationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

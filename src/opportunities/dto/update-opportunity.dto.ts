@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsDateString, IsNumber } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsNumber,
+  IsArray,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateOpportunityDto {
@@ -15,10 +21,20 @@ export class UpdateOpportunityDto {
   @IsString()
   description?: string;
 
+  @ApiProperty({ example: 37.7749, required: false })
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @ApiProperty({ example: -122.4194, required: false })
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
   @ApiProperty({ example: 'Community Garden', required: false })
   @IsOptional()
   @IsString()
-  location?: string;
+  placeName?: string;
 
   @ApiProperty({ example: '2025-07-15T10:00:00.000Z', required: false })
   @IsOptional()
@@ -38,4 +54,15 @@ export class UpdateOpportunityDto {
   @IsOptional()
   @IsNumber()
   ngoId?: number;
+
+  @ApiProperty({
+    description: 'Array of image URLs for the opportunity',
+    example: ['http://example.com/updated_image.png'],
+    required: false,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
 }
