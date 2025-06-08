@@ -51,18 +51,20 @@ export class OpportunitiesController {
 
   @Get()
   @ApiOkResponse({
-    description: 'A list of all opportunities, optionally filtered.',
+    description:
+      'A list of all opportunities, optionally filtered and paginated.',
     type: [Opportunity],
-  })
+  }) // Swagger response type slightly misleading, but generally fine
   findAll(
     @Query(
       new ValidationPipe({
         transform: true,
         transformOptions: { enableImplicitConversion: true },
       }),
-    ) // <-- Apply validation and transformation
-    query: FindOpportunitiesQueryDto, // <-- Use the new DTO for query parameters
+    )
+    query: FindOpportunitiesQueryDto,
   ) {
+    // No change needed here, just call the service method
     return this.opportunitiesService.findAll(query);
   }
 

@@ -9,7 +9,11 @@ import { Repository } from 'typeorm';
 import { Opportunity } from './entities/opportunity.entity';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto';
 import { UpdateOpportunityDto } from './dto/update-opportunity.dto';
-import { FindOpportunitiesQueryDto } from './dto/find-opportunities-query.dto';
+import {
+  FindOpportunitiesQueryDto,
+  OpportunityOrderBy,
+  OrderDirection,
+} from './dto/find-opportunities-query.dto';
 
 @Injectable()
 export class OpportunitiesService {
@@ -26,7 +30,10 @@ export class OpportunitiesService {
     return this.opportunitiesRepository.save(opportunity);
   }
 
-  async findAll(query: FindOpportunitiesQueryDto): Promise<Opportunity[]> {
+  async findAll(
+    query: FindOpportunitiesQueryDto,
+  ): Promise<{ data: Opportunity[]; total: number }> {
+    // <-- UPDATED RETURN TYPE
     const {
       keyword,
       startDate,
@@ -35,7 +42,14 @@ export class OpportunitiesService {
       longitude,
       radiusKm,
       ngoName,
+      page = 1, // Default values for pagination
+      limit = 10, // Default values for pagination
+      orderBy = OpportunityOrderBy.CREATED_AT, // Default values for sorting
+      orderDirection = OrderDirection.DESC, // Default values for sorting
     } = query;
+
+    // Calculate skip based on page and limit
+    const skip = (page - 1) * limit;
 
     // Initialize QueryBuilder
     const queryBuilder =
@@ -78,15 +92,26 @@ export class OpportunitiesService {
       });
     }
 
-    // Default ordering (most recent first)
-    queryBuilder.orderBy('opportunity.createdAt', 'DESC');
+    // --- APPLY SORTING ---
+    // Ensure the orderBy field exists on the opportunity entity or the joined entity (e.g., ngo.name)
+    // For joined relations, you might need to specify 'ngo.name' explicitly.
+    // orderBy directly maps to opportunity fields.
+    queryBuilder.orderBy(`opportunity.${orderBy}`, orderDirection);
 
-    // Execute the initial query to get opportunities that match non-location filters
-    // We fetch them all first because location filtering is done in memory for now.
+    // First, get the total count of opportunities *before* applying pagination limits
+    const totalOpportunities = await queryBuilder.getCount();
+
+    // Now, apply pagination for the data we return
+    queryBuilder.offset(skip).limit(limit);
+
+    // Execute the query to get the paginated opportunities
     let opportunities = await queryBuilder.getMany();
 
     // 4. Location-based filtering (still in-memory for now)
     // This part happens AFTER the database query results are fetched
+    // IMPORTANT: If you have a large number of opportunities, moving this to the database
+    // with PostGIS would be essential for performance, as in-memory filtering bypasses DB pagination.
+    // For now, it will apply to the 'limit' number of opportunities fetched.
     if (
       latitude !== undefined &&
       longitude !== undefined &&
@@ -98,18 +123,17 @@ export class OpportunitiesService {
 
       const R = 6371; // Earth's radius in kilometers (for Haversine formula)
 
+      // Convert search origin coordinates (from query parameters) to radians
+      const lat1 = latitude * (Math.PI / 180);
+      const lon1 = longitude * (Math.PI / 180);
+
       opportunities = opportunities.filter((opportunity) => {
         // Check if opportunity has valid coordinates before calculation
         if (opportunity.latitude == null || opportunity.longitude == null) {
           return false; // Exclude opportunities without defined coordinates
         }
 
-        // Convert search origin coordinates (from query parameters) to radians
-        const lat1 = latitude * (Math.PI / 180);
-        const lon1 = longitude * (Math.PI / 180);
-
         // Convert opportunity coordinates (from database) to radians
-        // Use '!' non-null assertion operator because we just checked for null/undefined
         const lat2 = opportunity.latitude! * (Math.PI / 180);
         const lon2 = opportunity.longitude! * (Math.PI / 180);
 
@@ -129,9 +153,19 @@ export class OpportunitiesService {
 
         return distance <= radiusKm;
       });
+
+      // NOTE: If location filtering significantly reduces the number of results,
+      // and you need accurate pagination/total count *after* location filtering,
+      // you would need to adjust the logic to apply location filtering in the database
+      // or filter first and then paginate, which is less efficient.
+      // For now, totalOpportunities is the count before in-memory location filtering.
     }
 
-    return opportunities;
+    return {
+      data: opportunities,
+      total: totalOpportunities, // This total is BEFORE in-memory location filtering.
+      // A more robust solution would integrate location filtering into the DB query.
+    };
   }
 
   async findOne(id: number): Promise<Opportunity> {

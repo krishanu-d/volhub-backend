@@ -11,7 +11,7 @@ import {
 import { ApiProperty, ApiHideProperty } from '@nestjs/swagger';
 import { Opportunity } from '../../opportunities/entities/opportunity.entity';
 import { Application } from '../../applications/entities/application.entity'; // <-- NEW: Import Application entity
-import { UserRole } from '../dto/update-user.dto';
+import { UserRole } from 'src/enums';
 
 @Entity('users')
 export class User {
@@ -67,11 +67,17 @@ export class User {
 
   @ApiProperty({
     description: 'The role of the user',
-    enum: UserRole, // Use the imported UserRole enum directly here
-    example: UserRole.VOLUNTEER, // Example using the enum value
+    enum: UserRole,
+    example: UserRole.VOLUNTEER,
+    nullable: true,
   })
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.VOLUNTEER }) // Use the imported enum here
-  role: UserRole; // Use the imported enum type
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    nullable: true,
+    default: null,
+  })
+  role?: UserRole | null;
 
   @ApiProperty({
     description: 'About section for the user/NGO',
