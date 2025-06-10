@@ -10,7 +10,7 @@ import { Application, ApplicationStatus } from './entities/application.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { Opportunity } from '../opportunities/entities/opportunity.entity';
 import { User } from '../users/entities/user.entity';
-import { UserRole } from 'src/users/dto/update-user.dto';
+import { UserRole } from 'src/enums';
 
 @Injectable()
 export class ApplicationsService {
@@ -192,5 +192,46 @@ export class ApplicationsService {
 
     application.status = ApplicationStatus.WITHDRAWN;
     return this.applicationsRepository.save(application);
+  }
+
+  async findApplicantsByOpportunityId(
+    opportunityId: number,
+    ngoUserId: number,
+  ): Promise<User[]> {
+    // 1. Verify the opportunity exists and belongs to the requesting NGO
+    const opportunity = await this.opportunitiesRepository.findOne({
+      where: { id: opportunityId },
+      relations: ['ngo'], // Eager load the NGO relation
+    });
+
+    if (!opportunity) {
+      throw new NotFoundException(
+        `Opportunity with ID ${opportunityId} not found.`,
+      );
+    }
+
+    // Ensure the requesting NGO owns this opportunity
+    if (opportunity.ngo.id !== ngoUserId) {
+      // If the NGO making the request is not the one who posted the opportunity,
+      // and they are not an ADMIN, deny access.
+      throw new NotFoundException(
+        `Opportunity with ID ${opportunityId} not found or you do not have access.`,
+      );
+    }
+
+    // 2. Find all applications for this opportunity and load the associated volunteer
+    const applications = await this.applicationsRepository.find({
+      where: { opportunity: { id: opportunityId } }, // Filter by opportunity ID
+      relations: ['volunteer'], // Eager load the 'volunteer' (User) relation
+    });
+
+    if (applications.length === 0) {
+      // No applicants found for this opportunity, which is a valid state
+      return [];
+    }
+
+    const applicants: User[] = applications.map((app) => app.volunteer);
+
+    return applicants;
   }
 }

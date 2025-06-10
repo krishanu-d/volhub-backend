@@ -10,6 +10,7 @@ import {
   ValidationPipe,
   Query,
   Req,
+  HttpStatus,
 } from '@nestjs/common';
 import { OpportunitiesService } from './opportunities.service';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto';
@@ -18,20 +19,26 @@ import {
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Opportunity } from './entities/opportunity.entity';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import { UserRole } from 'src/users/dto/update-user.dto';
 import { FindOpportunitiesQueryDto } from './dto/find-opportunities-query.dto';
+import { UserRole } from 'src/enums';
+import { User } from 'src/users/entities/user.entity';
+import { ApplicationsService } from 'src/applications/applications.service';
 
 @ApiTags('opportunities')
 @ApiBearerAuth()
 @Controller('opportunities')
 export class OpportunitiesController {
-  constructor(private readonly opportunitiesService: OpportunitiesService) {}
+  constructor(
+    private readonly opportunitiesService: OpportunitiesService,
+    private readonly applicationsService: ApplicationsService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -129,5 +136,29 @@ export class OpportunitiesController {
     @Req() req, // Add @Req() req here
   ) {
     return this.opportunitiesService.remove(+id, req.user.id); // Pass req.user.id to service
+  }
+
+  @Get(':opportunityId/applicants')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.NGO, UserRole.ADMIN) // Only NGOs (who own it) and Admins can view applicants
+  @ApiOkResponse({
+    description:
+      'List of users (volunteers) who applied for the specified opportunity.',
+    type: [User], // Returns an array of User objects
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Opportunity not found or you do not have access.',
+  })
+  async getApplicants(
+    @Param('opportunityId') opportunityId: string,
+    @Req() req, // To get the requesting NGO's ID
+  ): Promise<User[]> {
+    // Call the new service method in ApplicationsService
+    // req.user.id is the ID of the authenticated user (the NGO or Admin)
+    return this.applicationsService.findApplicantsByOpportunityId(
+      +opportunityId,
+      req.user.id,
+    );
   }
 }

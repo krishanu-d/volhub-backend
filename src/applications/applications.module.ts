@@ -1,17 +1,19 @@
+// src/applications/applications.module.ts
+
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Application } from './entities/application.entity'; // Import your Application entity
-import { Opportunity } from '../opportunities/entities/opportunity.entity'; // Import Opportunity for potential service use
-import { User } from '../users/entities/user.entity'; // Import User for potential service use
 import { ApplicationsService } from './applications.service';
 import { ApplicationsController } from './applications.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Application } from './entities/application.entity';
+import { User } from 'src/users/entities/user.entity'; // <-- Ensure User entity is imported
+import { Opportunity } from 'src/opportunities/entities/opportunity.entity'; // <-- Ensure Opportunity entity is imported
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Application, Opportunity, User]), // Register Application, Opportunity, and User entities for this module
+    TypeOrmModule.forFeature([Application, User, Opportunity]), // Make sure all repositories used in ApplicationsService are provided
   ],
-  providers: [ApplicationsService],
   controllers: [ApplicationsController],
-  exports: [ApplicationsService, TypeOrmModule], // Export service if other modules need to inject it, and TypeOrmModule if entities are used elsewhere
+  providers: [ApplicationsService],
+  exports: [ApplicationsService, TypeOrmModule], // <-- IMPORTANT: Export ApplicationsService here
 })
 export class ApplicationsModule {}

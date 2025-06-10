@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
@@ -11,7 +11,7 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
 
 @Module({
   imports: [
-    UsersModule,
+    forwardRef(() => UsersModule),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -25,6 +25,6 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
   ],
   providers: [AuthService, GoogleStrategy, JwtStrategy, FacebookStrategy], // Add JwtStrategy to providers
   controllers: [AuthController],
-  exports: [AuthService], // If AuthService is used in other modules
+  exports: [AuthService, JwtModule, PassportModule], // If AuthService is used in other modules
 })
 export class AuthModule {}

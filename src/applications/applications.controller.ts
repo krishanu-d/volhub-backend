@@ -21,7 +21,7 @@ import { Application, ApplicationStatus } from './entities/application.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from 'src/users/dto/update-user.dto';
+import { UserRole } from 'src/enums';
 
 @ApiTags('applications')
 @ApiBearerAuth() // Indicates that JWT token is required for these endpoints
