@@ -6,11 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Application, ApplicationStatus } from './entities/application.entity';
+import { Application } from './entities/application.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { Opportunity } from '../opportunities/entities/opportunity.entity';
 import { User } from '../users/entities/user.entity';
-import { UserRole } from 'src/enums';
+import { ApplicationStatus, UserRole } from 'src/enums';
 
 @Injectable()
 export class ApplicationsService {

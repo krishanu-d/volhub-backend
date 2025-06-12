@@ -9,11 +9,8 @@ import { Repository } from 'typeorm';
 import { Opportunity } from './entities/opportunity.entity';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto';
 import { UpdateOpportunityDto } from './dto/update-opportunity.dto';
-import {
-  FindOpportunitiesQueryDto,
-  OpportunityOrderBy,
-  OrderDirection,
-} from './dto/find-opportunities-query.dto';
+import { FindOpportunitiesQueryDto } from './dto/find-opportunities-query.dto';
+import { OpportunityOrderBy, OrderDirection } from 'src/enums';
 
 @Injectable()
 export class OpportunitiesService {

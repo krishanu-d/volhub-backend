@@ -10,15 +10,7 @@ import {
 import { User } from '../../users/entities/user.entity'; // Import User entity
 import { Opportunity } from '../../opportunities/entities/opportunity.entity'; // Import Opportunity entity
 import { ApiProperty } from '@nestjs/swagger';
-
-// Define an Enum for Application Status
-export enum ApplicationStatus {
-  PENDING = 'pending',
-  ACCEPTED = 'accepted',
-  REJECTED = 'rejected',
-  WITHDRAWN = 'withdrawn',
-  COMPLETED = 'completed', // For when the opportunity is done
-}
+import { ApplicationStatus } from 'src/enums';
 
 @Entity('applications')
 export class Application {

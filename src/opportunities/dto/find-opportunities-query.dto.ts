@@ -10,19 +10,7 @@ import {
 } from 'class-validator'; // <-- NEW: IsIn
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-
-// Define possible fields to order by
-export enum OpportunityOrderBy {
-  CREATED_AT = 'createdAt',
-  START_DATE = 'startDate',
-  END_DATE = 'endDate',
-  TITLE = 'title',
-}
-
-export enum OrderDirection {
-  ASC = 'ASC',
-  DESC = 'DESC',
-}
+import { OpportunityOrderBy, OrderDirection } from 'src/enums';
 
 export class FindOpportunitiesQueryDto {
   @ApiProperty({
