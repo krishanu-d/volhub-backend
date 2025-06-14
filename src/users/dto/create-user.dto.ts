@@ -6,9 +6,10 @@ import {
   IsOptional,
   IsString,
   IsEnum,
+  IsArray,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from 'src/enums';
+import { OpportunityCategory, UserRole } from 'src/enums';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -67,5 +68,19 @@ export class CreateUserDto {
   })
   @IsOptional()
   @IsEnum(UserRole)
-  role?: UserRole | null; // <-- Crucial: Make it optional and allow null
+  role?: UserRole | null;
+
+  @ApiProperty({
+    description:
+      'Categories the user is interested in (Volunteer) or focuses on (NGO)',
+    type: [String],
+    enum: OpportunityCategory,
+    example: [OpportunityCategory.EDUCATION, OpportunityCategory.ENVIRONMENT],
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(OpportunityCategory, { each: true }) // Validates each item in the array against the enum
+  categories?: OpportunityCategory[] | null;
 }

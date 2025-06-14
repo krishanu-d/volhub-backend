@@ -11,6 +11,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { ApiProperty, ApiHideProperty } from '@nestjs/swagger'; // <-- NEW: Import ApiHideProperty
 import { Application } from '../../applications/entities/application.entity'; // <-- NEW: Import Application entity
+import { OpportunityCategory } from 'src/enums';
 
 @Entity('opportunities')
 export class Opportunity {
@@ -90,6 +91,21 @@ export class Opportunity {
   })
   @Column({ type: 'json', nullable: true })
   images?: string[];
+
+  @ApiProperty({
+    description: 'The category of the opportunity',
+    enum: OpportunityCategory,
+    example: [OpportunityCategory.EDUCATION, OpportunityCategory.ENVIRONMENT],
+    isArray: true,
+    nullable: false,
+  })
+  @Column({
+    type: 'enum',
+    enum: OpportunityCategory,
+    array: true,
+    nullable: false,
+  })
+  categories: OpportunityCategory[]; // Make sure the type matches your enum
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

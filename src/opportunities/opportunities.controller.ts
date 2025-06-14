@@ -52,16 +52,20 @@ export class OpportunitiesController {
     @Req() req,
   ) {
     // Optionally, enforce ngoId from authenticated user's ID here for security
+    console.log('req.user:', req.user); // Log the user object to debug
     createOpportunityDto.ngoId = req.user.id; // <--- ENSURE ngoId IS SET FROM AUTHENTICATED USER
     return this.opportunitiesService.create(createOpportunityDto);
   }
 
   @Get()
+  // Apply JwtAuthGuard to populate req.user, but allow unauthenticated access
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOkResponse({
     description:
       'A list of all opportunities, optionally filtered and paginated.',
     type: [Opportunity],
-  }) // Swagger response type slightly misleading, but generally fine
+  })
   findAll(
     @Query(
       new ValidationPipe({
@@ -70,9 +74,10 @@ export class OpportunitiesController {
       }),
     )
     query: FindOpportunitiesQueryDto,
+    @Req() req,
   ) {
-    // No change needed here, just call the service method
-    return this.opportunitiesService.findAll(query);
+    const userId = req?.user?.id;
+    return this.opportunitiesService.findAll(query, userId); // Pass the user object to the service
   }
 
   @Get('recent')

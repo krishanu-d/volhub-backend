@@ -11,7 +11,7 @@ import {
 import { ApiProperty, ApiHideProperty } from '@nestjs/swagger';
 import { Opportunity } from '../../opportunities/entities/opportunity.entity';
 import { Application } from '../../applications/entities/application.entity'; // <-- NEW: Import Application entity
-import { UserRole } from 'src/enums';
+import { OpportunityCategory, UserRole } from 'src/enums';
 
 @Entity('users')
 export class User {
@@ -116,6 +116,38 @@ export class User {
 
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  @ApiProperty({
+    description:
+      'Categories the user is interested in (Volunteer) or focuses on (NGO)',
+    enum: OpportunityCategory,
+    example: OpportunityCategory.EDUCATION,
+    nullable: true,
+  })
+  @Column({
+    type: 'enum',
+    enum: OpportunityCategory,
+    nullable: true,
+    array: true,
+    default: null,
+  })
+  categories?: OpportunityCategory[] | null;
+
+  @ApiProperty({
+    description: 'Whether the user wants to receive push notifications',
+    example: true,
+    default: true,
+  })
+  @Column({ type: 'boolean', default: true })
+  receivePushNotifications: boolean; // True by default
+
+  @ApiProperty({
+    description: 'Whether the user wants to receive email notifications',
+    example: true,
+    default: true,
+  })
+  @Column({ type: 'boolean', default: true })
+  receiveEmailNotifications: boolean; // True by default
 
   // Existing relationship for NGOs to opportunities
   @ApiProperty({ type: () => Opportunity })

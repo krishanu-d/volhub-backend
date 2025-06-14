@@ -72,9 +72,28 @@ export class UsersService {
     return this.usersRepository.save(userToUpdate);
   }
 
-  async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<User> {
-    const user = await this.findUserById(id); // Ensure the user exists
-    await this.usersRepository.update(id, updateUserDto);
-    return this.findUserById(id); // Return the updated user
+  // async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<User> {
+  //   const user = await this.findUserById(id); // Ensure the user exists
+  //   await this.usersRepository.update(id, updateUserDto);
+  //   return this.findUserById(id); // Return the updated user
+  // }
+
+  async updateUser(
+    userId: number,
+    updateUserDto: UpdateUserDto,
+  ): Promise<User> {
+    const userToUpdate = await this.findUserById(userId); // Fetch the existing user entity
+
+    // Merge the properties from the DTO onto the fetched user entity
+    // Object.assign correctly handles array properties
+    Object.assign(userToUpdate, updateUserDto);
+
+    // Use .save() to persist the changes.
+    // .save() is more intelligent and understands the entity's structure,
+    // including array and enum types, leading to correct SQL generation.
+    const updatedUser = await this.usersRepository.save(userToUpdate); // <-- THIS IS THE CORRECT LINE
+
+    return updatedUser; // Return the fully updated user entity directly
+    // return this.findUserById(userId); // You can also return the result of findUserById(userId) again if preferred,
   }
 }

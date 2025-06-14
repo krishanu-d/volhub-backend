@@ -1,70 +1,95 @@
-// src/opportunities/dto/find-opportunities-query.dto.ts
-
 import {
   IsOptional,
+  IsEnum,
+  IsArray,
+  IsInt,
+  Min,
+  Max,
   IsString,
   IsNumber,
-  IsDateString,
-  Min,
-  IsIn,
-} from 'class-validator'; // <-- NEW: IsIn
-import { Type } from 'class-transformer';
+  IsLatitude,
+  IsLongitude,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { OpportunityOrderBy, OrderDirection } from 'src/enums';
+import { Type } from 'class-transformer'; // For transforming query params to numbers
+import { OpportunityCategory, OpportunitySortBy, SortOrder } from 'src/enums';
 
 export class FindOpportunitiesQueryDto {
   @ApiProperty({
-    description: 'Keyword to search in title or description',
+    description: 'Filter opportunities by one or more categories',
+    type: [String],
+    enum: OpportunityCategory,
+    example: [OpportunityCategory.EDUCATION, OpportunityCategory.ENVIRONMENT],
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(OpportunityCategory, { each: true })
+  categories?: OpportunityCategory[];
+
+  @ApiProperty({
+    description: 'Search term for title or description',
+    example: 'volunteer',
     required: false,
   })
   @IsOptional()
   @IsString()
-  keyword?: string;
+  search?: string;
 
   @ApiProperty({
-    description:
-      'Filter opportunities starting from this date (ISO 8601 format)',
+    description: 'Start date for opportunities (ISO 8601)',
+    example: '2025-01-01',
     required: false,
-    example: '2025-07-01T00:00:00.000Z',
   })
   @IsOptional()
-  @IsDateString()
+  @IsString()
   startDate?: string;
 
   @ApiProperty({
-    description: 'Filter opportunities ending by this date (ISO 8601 format)',
+    description: 'End date for opportunities (ISO 8601)',
+    example: '2025-12-31',
     required: false,
-    example: '2025-08-31T23:59:59.999Z',
   })
   @IsOptional()
-  @IsDateString()
+  @IsString()
   endDate?: string;
 
   @ApiProperty({
-    description: 'Latitude of the search origin (for proximity search)',
+    description: 'Filter by NGO name',
+    example: 'Helping Hands',
     required: false,
-    example: 21.2514,
+  })
+  @IsOptional()
+  @IsString()
+  ngoName?: string;
+
+  @ApiProperty({
+    description: 'Latitude for location-based search',
+    example: 12.9716,
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @IsLatitude()
   latitude?: number;
 
   @ApiProperty({
-    description: 'Longitude of the search origin (for proximity search)',
+    description: 'Longitude for location-based search',
+    example: 77.5946,
     required: false,
-    example: 81.6296,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @IsLongitude()
   longitude?: number;
 
   @ApiProperty({
-    description:
-      'Radius in kilometers for proximity search (requires latitude and longitude)',
-    required: false,
+    description: 'Radius in kilometers for location-based search',
     example: 50,
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -73,56 +98,45 @@ export class FindOpportunitiesQueryDto {
   radiusKm?: number;
 
   @ApiProperty({
-    description: 'Search by the name of the NGO that posted the opportunity',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  ngoName?: string;
-
-  @ApiProperty({
     description: 'Page number for pagination',
-    required: false,
-    default: 1,
     example: 1,
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(1)
-  page?: number = 1; // Default to page 1
+  page?: number = 1;
 
   @ApiProperty({
-    description: 'Number of items per page for pagination',
-    required: false,
-    default: 10,
+    description: 'Number of items per page',
     example: 10,
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
+  @IsInt()
   @Min(1)
-  limit?: number = 10; // Default to 10 items per page
+  @Max(100)
+  limit?: number = 10;
 
   @ApiProperty({
     description: 'Field to sort opportunities by',
-    enum: OpportunityOrderBy,
+    enum: OpportunitySortBy,
+    example: OpportunitySortBy.CREATED_AT,
     required: false,
-    default: OpportunityOrderBy.CREATED_AT,
-    example: OpportunityOrderBy.CREATED_AT,
   })
   @IsOptional()
-  @IsIn(Object.values(OpportunityOrderBy)) // Validate against enum values
-  orderBy?: OpportunityOrderBy = OpportunityOrderBy.CREATED_AT; // Default sort by createdAt
+  @IsEnum(OpportunitySortBy)
+  sortBy?: OpportunitySortBy = OpportunitySortBy.CREATED_AT;
 
   @ApiProperty({
-    description: 'Sort order direction (ASC or DESC)',
-    enum: OrderDirection,
+    description: 'Sort order (ASC or DESC)',
+    enum: SortOrder,
+    example: SortOrder.DESC,
     required: false,
-    default: OrderDirection.DESC,
-    example: OrderDirection.DESC,
   })
   @IsOptional()
-  @IsIn(Object.values(OrderDirection)) // Validate against enum values
-  orderDirection?: OrderDirection = OrderDirection.DESC; // Default sort descending
+  @IsEnum(SortOrder)
+  sortOrder?: SortOrder = SortOrder.DESC;
 }

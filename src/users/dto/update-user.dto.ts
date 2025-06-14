@@ -1,5 +1,14 @@
-import { IsOptional, IsString, IsUrl, IsNumber, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsUrl,
+  IsNumber,
+  IsEnum,
+  IsArray,
+  IsBoolean,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger'; // Import ApiProperty
+import { OpportunityCategory } from 'src/enums';
 
 export class UpdateUserDto {
   @ApiProperty({ description: 'The name of the user', required: false })
@@ -50,4 +59,36 @@ export class UpdateUserDto {
   @IsString()
   @IsUrl()
   picture?: string;
+
+  @ApiProperty({
+    description:
+      'Categories the user is interested in (Volunteer) or focuses on (NGO)',
+    type: [String],
+    enum: OpportunityCategory,
+    example: [OpportunityCategory.EDUCATION, OpportunityCategory.ENVIRONMENT],
+    required: false,
+    nullable: true,
+  })
+  @IsOptional() // This property is optional during initial user creation
+  @IsArray()
+  @IsEnum(OpportunityCategory, { each: true }) // Validates each item in the array against the enum
+  categories?: OpportunityCategory[] | null;
+
+  @ApiProperty({
+    description: 'Whether the user wants to receive push notifications',
+    required: false,
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  receivePushNotifications?: boolean;
+
+  @ApiProperty({
+    description: 'Whether the user wants to receive email notifications',
+    required: false,
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  receiveEmailNotifications?: boolean;
 }

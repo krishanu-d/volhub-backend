@@ -5,8 +5,10 @@ import {
   IsOptional,
   IsNumber,
   IsArray,
+  IsEnum,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { OpportunityCategory } from 'src/enums';
 
 export class CreateOpportunityDto {
   @ApiProperty({ example: 'Help at the park cleanup' })
@@ -62,4 +64,14 @@ export class CreateOpportunityDto {
   @IsArray()
   @IsString({ each: true })
   images?: string[];
+
+  @ApiProperty({
+    description: 'Categories for the opportunity',
+    enum: OpportunityCategory,
+    isArray: true,
+    example: [OpportunityCategory.ENVIRONMENT, OpportunityCategory.EDUCATION],
+  })
+  @IsArray() // It's an array
+  @IsEnum(OpportunityCategory, { each: true }) // Each item in the array must be an enum
+  categories: OpportunityCategory[]; // Type it as an array
 }

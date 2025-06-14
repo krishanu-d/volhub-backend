@@ -55,6 +55,8 @@ export class UsersController {
     type: User,
   })
   async getProfile(@Req() req): Promise<User> {
+    console.log('req:', req);
+    console.log('req.user:', req.user);
     // Assuming req.user.id is populated by your JwtAuthGuard
     return this.usersService.findUserById(req.user.id);
   }
