@@ -4,9 +4,13 @@ import { OpportunitiesController } from './opportunities.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Opportunity } from './entities/opportunity.entity';
 import { ApplicationsModule } from 'src/applications/applications.module';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Opportunity]), ApplicationsModule],
+  imports: [
+    TypeOrmModule.forFeature([Opportunity, RabbitMQService]),
+    ApplicationsModule,
+  ],
   controllers: [OpportunitiesController],
   providers: [OpportunitiesService],
   exports: [OpportunitiesService],

@@ -2,10 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ReturningStatementNotSupportedError } from 'typeorm';
 import { Opportunity } from './entities/opportunity.entity';
 import { CreateOpportunityDto } from './dto/create-opportunity.dto';
 import { UpdateOpportunityDto } from './dto/update-opportunity.dto';
@@ -15,17 +16,22 @@ import {
   OpportunityOrderBy,
   OpportunitySortBy,
   OrderDirection,
+  RabbitMQEventType,
+  RabbitMQRoutingKey,
   SortOrder,
 } from 'src/enums';
 import { User } from 'src/users/entities/user.entity';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 
 @Injectable()
 export class OpportunitiesService {
   constructor(
+    private readonly logger = new Logger(OpportunitiesService.name),
     @InjectRepository(Opportunity)
     private opportunitiesRepository: Repository<Opportunity>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    private readonly rabbitMQService: RabbitMQService, // Inject the RabbitMQService
   ) {}
 
   async create(
@@ -33,7 +39,32 @@ export class OpportunitiesService {
   ): Promise<Opportunity> {
     const opportunity =
       this.opportunitiesRepository.create(createOpportunityDto);
-    return this.opportunitiesRepository.save(opportunity);
+    const savedOpportunity =
+      await this.opportunitiesRepository.save(opportunity);
+
+    // --- Publish Notification Event: New Opportunity Created ---
+    try {
+      // The Go service will handle finding relevant volunteers based on categories/subscriptions
+      await this.rabbitMQService.publish(
+        RabbitMQRoutingKey.OPPORTUNITY_CREATED, // Routing key for new opportunities
+        {
+          type: RabbitMQEventType.OPPORTUNITY_CREATED,
+          opportunityId: savedOpportunity.id,
+          opportunityTitle: savedOpportunity.title,
+          opportunityCategories: savedOpportunity.categories, // Include categories for matching
+          opportunityLatitude: savedOpportunity.latitude,
+          opportunityLongitude: savedOpportunity.longitude,
+          ngoId: savedOpportunity.ngo.id,
+          ngoName: savedOpportunity.ngo.name,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish NEW_OPPORTUNITY event for Opportunity ID ${savedOpportunity.id}: ${error.message}`,
+      );
+    }
+
+    return savedOpportunity;
   }
 
   async findAll(
@@ -270,7 +301,32 @@ export class OpportunitiesService {
     }
 
     Object.assign(opportunity, updateOpportunityDto);
-    return this.opportunitiesRepository.save(opportunity);
+    const updatedOpportunity =
+      await this.opportunitiesRepository.save(opportunity);
+
+    // --- Publish Notification Event: Opportunity Updated ---
+    try {
+      // The Go service will handle finding relevant volunteers based on categories/subscriptions
+      await this.rabbitMQService.publish(
+        RabbitMQRoutingKey.OPPORTUNITY_UPDATED, // Routing key for updated opportunities
+        {
+          type: RabbitMQEventType.OPPORTUNITY_UPDATED,
+          opportunityId: updatedOpportunity.id,
+          opportunityTitle: updatedOpportunity.title,
+          opportunityCategories: updatedOpportunity.categories, // Include categories for matching
+          opportunityLatitude: updatedOpportunity.latitude,
+          opportunityLongitude: updatedOpportunity.longitude,
+          ngoId: updatedOpportunity.ngo.id,
+          ngoName: updatedOpportunity.ngo.name,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish UPDATE_OPPORTUNITY event for Opportunity ID ${updatedOpportunity.id}: ${error.message}`,
+      );
+    }
+
+    return updatedOpportunity;
   }
 
   async remove(id: number, ngoUser: User): Promise<void> {
@@ -286,6 +342,28 @@ export class OpportunitiesService {
     if (opportunity.ngo.id !== ngoUser.id) {
       throw new BadRequestException(
         'You are not authorized to delete this opportunity.',
+      );
+    }
+
+    // --- Publish Notification Event: Opportunity Deleted ---
+    try {
+      // The Go service will handle finding relevant volunteers based on categories/subscriptions
+      await this.rabbitMQService.publish(
+        RabbitMQRoutingKey.OPPORTUNITY_DELETED, // Routing key for new opportunities
+        {
+          type: RabbitMQEventType.OPPORTUNITY_DELETED,
+          opportunityId: opportunity.id,
+          opportunityTitle: opportunity.title,
+          opportunityCategories: opportunity.categories, // Include categories for matching
+          opportunityLatitude: opportunity.latitude,
+          opportunityLongitude: opportunity.longitude,
+          ngoId: opportunity.ngo.id,
+          ngoName: opportunity.ngo.name,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish DELETE_OPPORTUNITY event for Opportunity ID ${opportunity.id}: ${error.message}`,
       );
     }
 

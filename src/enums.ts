@@ -54,3 +54,22 @@ export enum SortOrder {
   ASC = 'ASC',
   DESC = 'DESC',
 }
+
+export enum RabbitMQRoutingKey {
+  APPLICATION_NEW = 'application.new',
+  APPLICATION_STATUS_CHANGED = 'application.status_changed',
+  OPPORTUNITY_CREATED = 'opportunity.created',
+  OPPORTUNITY_UPDATED = 'opportunity.updated',
+  OPPORTUNITY_DELETED = 'opportunity.deleted',
+}
+
+export enum RabbitMQEventType {
+  APPLICATION_ACCEPTED = 'application.accepted',
+  APPLICATION_REJECTED = 'application.rejected',
+  APPLICATION_WITHDRAWN = 'application.withdrawn',
+  APPLICATION_COMPLETED = 'application.completed',
+  APPLICATION_STATUS_CHANGED = 'application.status_changed',
+  OPPORTUNITY_CREATED = 'opportunity.created',
+  OPPORTUNITY_UPDATED = 'opportunity.updated',
+  OPPORTUNITY_DELETED = 'opportunity.deleted',
+}

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,17 +11,25 @@ import { Application } from './entities/application.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { Opportunity } from '../opportunities/entities/opportunity.entity';
 import { User } from '../users/entities/user.entity';
-import { ApplicationStatus, UserRole } from 'src/enums';
+import {
+  ApplicationStatus,
+  RabbitMQEventType,
+  RabbitMQRoutingKey,
+  UserRole,
+} from 'src/enums';
+import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 
 @Injectable()
 export class ApplicationsService {
   constructor(
+    private readonly logger = new Logger(ApplicationsService.name),
     @InjectRepository(Application)
     private applicationsRepository: Repository<Application>,
     @InjectRepository(Opportunity)
     private opportunitiesRepository: Repository<Opportunity>,
     @InjectRepository(User)
     private usersRepository: Repository<User>, // Inject User repository to check volunteer role
+    private readonly rabbitMQService: RabbitMQService, // Inject the RabbitMQService
   ) {}
 
   // Service method to create a new application
@@ -68,7 +77,47 @@ export class ApplicationsService {
       status: ApplicationStatus.PENDING, // Default status
     });
 
-    return this.applicationsRepository.save(newApplication);
+    const savedApplication =
+      await this.applicationsRepository.save(newApplication);
+
+    // --- Publish Notification Event: New Application ---
+    try {
+      // Fetch related data needed for notification (e.g., volunteer's name, NGO's ID/email, opportunity title)
+      const volunteer = await this.usersRepository.findOne({
+        where: { id: volunteerId },
+      });
+      const opportunity = await this.opportunitiesRepository.findOne({
+        where: { id: createApplicationDto.opportunityId },
+        relations: ['ngo'], // Assuming opportunity has a relation to NGO
+      });
+
+      if (volunteer && opportunity && opportunity.ngo) {
+        await this.rabbitMQService.publish(
+          'application.new', // Routing key for new applications
+          {
+            type: 'NEW_APPLICATION',
+            applicationId: savedApplication.id,
+            volunteerId: volunteer.id,
+            volunteerName: volunteer.name, // Include data for the email
+            volunteerEmail: volunteer.email,
+            opportunityId: opportunity.id,
+            opportunityTitle: opportunity.title,
+            ngoId: opportunity.ngo.id,
+            ngoEmail: opportunity.ngo.email, // NGO's email for notification
+          },
+        );
+      } else {
+        this.logger.warn(
+          `Could not publish NEW_APPLICATION event: missing related data for Application ID ${savedApplication.id}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish NEW_APPLICATION event for Application ID ${savedApplication.id}: ${error.message}`,
+      );
+    }
+
+    return savedApplication;
   }
 
   // Service method for a volunteer to view their own applications
@@ -152,9 +201,68 @@ export class ApplicationsService {
     if (!Object.values(ApplicationStatus).includes(newStatus)) {
       throw new BadRequestException(`Invalid application status: ${newStatus}`);
     }
-
+    const oldStatus = application.status; // Store the old status for event publishing
     application.status = newStatus;
-    return this.applicationsRepository.save(application);
+    const updatedApplication =
+      await this.applicationsRepository.save(application);
+
+    if (oldStatus !== updatedApplication.status) {
+      try {
+        let routingKey: string;
+        let eventType: string;
+
+        // Determine the routing key and event type based on the new status
+        //Since the application status is updated, we can use the same routing key for all status changes
+        // This will allow us to handle all status changes in a single event type
+        routingKey = RabbitMQRoutingKey.APPLICATION_STATUS_CHANGED;
+        switch (updatedApplication.status) {
+          case ApplicationStatus.ACCEPTED:
+            eventType = RabbitMQEventType.APPLICATION_ACCEPTED;
+            break;
+          case ApplicationStatus.REJECTED:
+            eventType = RabbitMQEventType.APPLICATION_REJECTED;
+            break;
+          case ApplicationStatus.WITHDRAWN:
+            eventType = RabbitMQEventType.APPLICATION_WITHDRAWN;
+            break;
+          case ApplicationStatus.COMPLETED:
+            eventType = RabbitMQEventType.APPLICATION_COMPLETED;
+            break;
+          default:
+            eventType = RabbitMQEventType.APPLICATION_STATUS_CHANGED; // Default for other statuses
+        }
+
+        if (
+          updatedApplication.volunteer &&
+          updatedApplication.opportunity &&
+          updatedApplication.opportunity.ngo
+        ) {
+          await this.rabbitMQService.publish(routingKey, {
+            type: eventType,
+            applicationId: updatedApplication.id,
+            oldStatus: oldStatus,
+            newStatus: updatedApplication.status,
+            volunteerId: updatedApplication.volunteer.id,
+            volunteerName: updatedApplication.volunteer.name,
+            ngoId: updatedApplication.opportunity.ngo.id,
+            ngoName: updatedApplication.opportunity.ngo.name,
+            ngoEmail: updatedApplication.opportunity.ngo.email,
+            opportunityId: updatedApplication.opportunity.id,
+            opportunityTitle: updatedApplication.opportunity.title,
+          });
+        } else {
+          this.logger.warn(
+            `Could not publish application status/cancellation event: missing related data for Application ID ${updatedApplication.id}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to publish application status/cancellation event for Application ID ${updatedApplication.id}: ${error.message}`,
+        );
+      }
+    }
+
+    return updatedApplication;
   }
 
   // Service method for a volunteer to withdraw their application

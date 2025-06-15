@@ -8,6 +8,7 @@ import { User } from './users/entities/user.entity';
 import { ConfigModule } from '@nestjs/config'; // Import ConfigModule
 import { OpportunitiesModule } from './opportunities/opportunities.module';
 import { ApplicationsModule } from './applications/applications.module';
+import { RabbitMQService } from './rabbitmq/rabbitmq.service';
 
 @Module({
   imports: [
@@ -33,5 +34,6 @@ import { ApplicationsModule } from './applications/applications.module';
   ],
   controllers: [AppController],
   providers: [AppService],
+  exports: [RabbitMQService],
 })
 export class AppModule {}
