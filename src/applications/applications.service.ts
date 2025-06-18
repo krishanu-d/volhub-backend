@@ -18,11 +18,15 @@ import {
   UserRole,
 } from 'src/enums';
 import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
+import {
+  INotificationPayload,
+  INotificationRecipient,
+} from 'src/rabbitmq/notification-message.interface';
 
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
   constructor(
-    private readonly logger = new Logger(ApplicationsService.name),
     @InjectRepository(Application)
     private applicationsRepository: Repository<Application>,
     @InjectRepository(Opportunity)
@@ -82,7 +86,6 @@ export class ApplicationsService {
 
     // --- Publish Notification Event: New Application ---
     try {
-      // Fetch related data needed for notification (e.g., volunteer's name, NGO's ID/email, opportunity title)
       const volunteer = await this.usersRepository.findOne({
         where: { id: volunteerId },
       });
@@ -92,19 +95,35 @@ export class ApplicationsService {
       });
 
       if (volunteer && opportunity && opportunity.ngo) {
-        await this.rabbitMQService.publish(
-          'application.new', // Routing key for new applications
-          {
-            type: 'NEW_APPLICATION',
-            applicationId: savedApplication.id,
-            volunteerId: volunteer.id,
-            volunteerName: volunteer.name, // Include data for the email
-            volunteerEmail: volunteer.email,
-            opportunityId: opportunity.id,
-            opportunityTitle: opportunity.title,
-            ngoId: opportunity.ngo.id,
-            ngoEmail: opportunity.ngo.email, // NGO's email for notification
+        const ngoData = opportunity.ngo; // Get NGO data from the opportunity
+        const ngoRecipient: INotificationRecipient = {
+          user_id: opportunity.ngoId.toString(), // Convert ID to string for consistency with Go
+          email_address: ngoData.email,
+          prefs: {
+            receive_email: ngoData.receiveEmailNotifications,
+            receive_push: ngoData.receivePushNotifications,
           },
+        };
+
+        const notificationPayload: INotificationPayload = {
+          title: `New Application for ${opportunity.title}`,
+          body: `Volunteer ${volunteer.name} has applied for your opportunity.`,
+          subject: `New Application: ${volunteer.name} for ${opportunity.title}`,
+          deep_link: `/ngo/opportunities/${opportunity.id}/applications/${savedApplication.id}`,
+          application_id: savedApplication.id,
+          opportunity_id: opportunity.id,
+          volunteer_id: volunteer.id,
+          volunteer_name: volunteer.name,
+          ngo_id: ngoData.id,
+          ngo_name: ngoData.name,
+        };
+
+        console.log('ngoRecipient:', ngoRecipient);
+        await this.rabbitMQService.publishNotification(
+          RabbitMQRoutingKey.APPLICATION_NEW, // Use the enum
+          RabbitMQEventType.APPLICATION_NEW, // Use the enum
+          ngoRecipient,
+          notificationPayload,
         );
       } else {
         this.logger.warn(
@@ -165,9 +184,11 @@ export class ApplicationsService {
     newStatus: ApplicationStatus,
     ngoId: number, // NGO making the change
   ): Promise<Application> {
+    // 1. Load Application with ALL necessary relations upfront
     const application = await this.applicationsRepository.findOne({
       where: { id: applicationId },
-      relations: ['opportunity'], // Load opportunity to check ownership
+      // Load volunteer, opportunity, and opportunity's NGO
+      relations: ['volunteer', 'opportunity', 'opportunity.ngo'],
     });
 
     if (!application) {
@@ -177,7 +198,8 @@ export class ApplicationsService {
     }
 
     // Verify the NGO owns the opportunity associated with this application
-    if (application.opportunity.ngoId !== ngoId) {
+    // Check if application.opportunity exists before accessing its properties
+    if (!application.opportunity || application.opportunity.ngoId !== ngoId) {
       throw new ForbiddenException(
         'You are not authorized to update this application.',
       );
@@ -192,7 +214,6 @@ export class ApplicationsService {
       ].includes(application.status) &&
       ![ApplicationStatus.COMPLETED].includes(newStatus)
     ) {
-      // Allow moving to COMPLETED from other states if desired, but not back
       throw new BadRequestException(
         `Cannot change status from ${application.status}.`,
       );
@@ -201,63 +222,147 @@ export class ApplicationsService {
     if (!Object.values(ApplicationStatus).includes(newStatus)) {
       throw new BadRequestException(`Invalid application status: ${newStatus}`);
     }
+
     const oldStatus = application.status; // Store the old status for event publishing
     application.status = newStatus;
     const updatedApplication =
       await this.applicationsRepository.save(application);
 
+    // --- Publish Notification Event if status changed ---
     if (oldStatus !== updatedApplication.status) {
       try {
-        let routingKey: string;
-        let eventType: string;
+        let recipient: INotificationRecipient;
+        let payload: INotificationPayload;
+        let routingKey: RabbitMQRoutingKey =
+          RabbitMQRoutingKey.APPLICATION_STATUS_CHANGED; // This can be default
+        let eventType: RabbitMQEventType;
 
-        // Determine the routing key and event type based on the new status
-        //Since the application status is updated, we can use the same routing key for all status changes
-        // This will allow us to handle all status changes in a single event type
-        routingKey = RabbitMQRoutingKey.APPLICATION_STATUS_CHANGED;
+        // Ensure all required related entities are loaded
+        if (
+          !updatedApplication.volunteer ||
+          !updatedApplication.opportunity ||
+          !updatedApplication.opportunity.ngo
+        ) {
+          this.logger.warn(
+            `Skipping notification for Application ID ${updatedApplication.id}: missing volunteer, opportunity, or NGO data.`,
+          );
+          return updatedApplication; // Exit if critical data is missing
+        }
+
+        // Determine recipient and payload based on new status
         switch (updatedApplication.status) {
           case ApplicationStatus.ACCEPTED:
-            eventType = RabbitMQEventType.APPLICATION_ACCEPTED;
-            break;
           case ApplicationStatus.REJECTED:
-            eventType = RabbitMQEventType.APPLICATION_REJECTED;
+          case ApplicationStatus.COMPLETED:
+            // Recipient is the Volunteer
+            const volunteer = updatedApplication.volunteer;
+            // You'd fetch device tokens here if you have a UserDevice repository
+            // const volunteerDevice = await this.userDevicesRepository.findOne({ where: { userId: volunteer.id } });
+
+            recipient = {
+              user_id: volunteer.id.toString(),
+              email_address: volunteer.email,
+              device_token: undefined, // Replace with volunteerDevice?.fcmToken if fetched
+              prefs: {
+                receive_email: volunteer.receiveEmailNotifications,
+                receive_push: volunteer.receivePushNotifications,
+              },
+            };
+
+            payload = {
+              title: `Application ${updatedApplication.status.toLowerCase()}: ${updatedApplication.opportunity.title}`,
+              body: `Your application for "${updatedApplication.opportunity.title}" has been ${updatedApplication.status.toLowerCase()} by ${updatedApplication.opportunity.ngo.name}.`,
+              subject: `Update on your application for ${updatedApplication.opportunity.title}`,
+              deep_link: `/volunteer/applications/${updatedApplication.id}`,
+              application_id: updatedApplication.id,
+              old_status: oldStatus,
+              new_status: updatedApplication.status,
+              opportunity_id: updatedApplication.opportunity.id,
+              opportunity_title: updatedApplication.opportunity.title,
+              volunteer_id: volunteer.id,
+              volunteer_name: volunteer.name,
+              ngo_id: updatedApplication.opportunity.ngo.id,
+              ngo_name: updatedApplication.opportunity.ngo.name,
+            };
+
+            // Set specific event type for Go service to differentiate
+            if (updatedApplication.status === ApplicationStatus.ACCEPTED) {
+              eventType = RabbitMQEventType.APPLICATION_ACCEPTED;
+            } else if (
+              updatedApplication.status === ApplicationStatus.REJECTED
+            ) {
+              eventType = RabbitMQEventType.APPLICATION_REJECTED;
+            } else if (
+              updatedApplication.status === ApplicationStatus.COMPLETED
+            ) {
+              eventType = RabbitMQEventType.APPLICATION_COMPLETED;
+            } else {
+              eventType = RabbitMQEventType.APPLICATION_STATUS_CHANGED;
+            }
             break;
+
           case ApplicationStatus.WITHDRAWN:
+            // Recipient is the NGO
+            const ngo = updatedApplication.opportunity.ngo;
+            // You'd fetch device tokens here if you have a UserDevice repository
+            // const ngoDevice = await this.userDevicesRepository.findOne({ where: { userId: ngo.id } });
+
+            recipient = {
+              user_id: ngo.id.toString(),
+              email_address: ngo.email,
+              device_token: undefined, // Replace with ngoDevice?.fcmToken if fetched
+              prefs: {
+                receive_email: ngo.receiveEmailNotifications,
+                receive_push: ngo.receivePushNotifications,
+              },
+            };
+
+            payload = {
+              title: `Application Withdrawn: ${updatedApplication.opportunity.title}`,
+              body: `Volunteer ${updatedApplication.volunteer.name} has withdrawn their application for "${updatedApplication.opportunity.title}".`,
+              subject: `Application Withdrawn: ${updatedApplication.volunteer.name} for ${updatedApplication.opportunity.title}`,
+              deep_link: `/ngo/opportunities/${updatedApplication.opportunity.id}/applications/${updatedApplication.id}`,
+              application_id: updatedApplication.id,
+              old_status: oldStatus,
+              new_status: updatedApplication.status,
+              opportunity_id: updatedApplication.opportunity.id,
+              opportunity_title: updatedApplication.opportunity.title,
+              volunteer_id: updatedApplication.volunteer.id,
+              volunteer_name: updatedApplication.volunteer.name,
+              ngo_id: ngo.id,
+              ngo_name: ngo.name,
+            };
             eventType = RabbitMQEventType.APPLICATION_WITHDRAWN;
             break;
-          case ApplicationStatus.COMPLETED:
-            eventType = RabbitMQEventType.APPLICATION_COMPLETED;
-            break;
+
           default:
-            eventType = RabbitMQEventType.APPLICATION_STATUS_CHANGED; // Default for other statuses
+            this.logger.warn(
+              `No notification logic defined for status: ${updatedApplication.status}`,
+            );
+            return updatedApplication; // Don't send notification for unhandled statuses
         }
 
-        if (
-          updatedApplication.volunteer &&
-          updatedApplication.opportunity &&
-          updatedApplication.opportunity.ngo
-        ) {
-          await this.rabbitMQService.publish(routingKey, {
-            type: eventType,
-            applicationId: updatedApplication.id,
-            oldStatus: oldStatus,
-            newStatus: updatedApplication.status,
-            volunteerId: updatedApplication.volunteer.id,
-            volunteerName: updatedApplication.volunteer.name,
-            ngoId: updatedApplication.opportunity.ngo.id,
-            ngoName: updatedApplication.opportunity.ngo.name,
-            ngoEmail: updatedApplication.opportunity.ngo.email,
-            opportunityId: updatedApplication.opportunity.id,
-            opportunityTitle: updatedApplication.opportunity.title,
-          });
-        } else {
-          this.logger.warn(
-            `Could not publish application status/cancellation event: missing related data for Application ID ${updatedApplication.id}`,
-          );
-        }
+        // Publish the structured notification using the correct method
+        console.log('Publishing notification:', {
+          routingKey,
+          eventType,
+          recipient,
+          payload,
+        });
+        await this.rabbitMQService.publishNotification(
+          routingKey,
+          eventType as RabbitMQEventType, // Cast to enum type
+          recipient,
+          payload,
+        );
+
+        this.logger.log(
+          `Application status update notification for ID ${updatedApplication.id} published.`,
+        );
       } catch (error) {
         this.logger.error(
-          `Failed to publish application status/cancellation event for Application ID ${updatedApplication.id}: ${error.message}`,
+          `Failed to publish application status event for Application ID ${updatedApplication.id}: ${error.message}`,
+          error.stack, // Include stack for better debugging
         );
       }
     }

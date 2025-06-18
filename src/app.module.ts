@@ -33,7 +33,7 @@ import { RabbitMQService } from './rabbitmq/rabbitmq.service';
     ApplicationsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, RabbitMQService],
   exports: [RabbitMQService],
 })
 export class AppModule {}

@@ -76,7 +76,7 @@ export class Opportunity {
     description: 'The NGO that posted this opportunity',
     type: () => User,
   })
-  @ManyToOne(() => User, (user) => user.opportunities, { lazy: true })
+  @ManyToOne(() => User, (user) => user.opportunities)
   @JoinColumn({ name: 'ngoId' })
   ngo: User;
 

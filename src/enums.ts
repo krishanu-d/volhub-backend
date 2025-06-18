@@ -55,6 +55,8 @@ export enum SortOrder {
   DESC = 'DESC',
 }
 
+// src/enums.ts
+
 export enum RabbitMQRoutingKey {
   APPLICATION_NEW = 'application.new',
   APPLICATION_STATUS_CHANGED = 'application.status_changed',
@@ -64,12 +66,14 @@ export enum RabbitMQRoutingKey {
 }
 
 export enum RabbitMQEventType {
-  APPLICATION_ACCEPTED = 'application.accepted',
-  APPLICATION_REJECTED = 'application.rejected',
-  APPLICATION_WITHDRAWN = 'application.withdrawn',
-  APPLICATION_COMPLETED = 'application.completed',
-  APPLICATION_STATUS_CHANGED = 'application.status_changed',
-  OPPORTUNITY_CREATED = 'opportunity.created',
-  OPPORTUNITY_UPDATED = 'opportunity.updated',
-  OPPORTUNITY_DELETED = 'opportunity.deleted',
+  // Change 'application.new' to 'NGO_NEW_APPLICATION'
+  APPLICATION_NEW = 'NGO_NEW_APPLICATION', // <--- IMPORTANT CHANGE HERE
+  APPLICATION_ACCEPTED = 'APPLICATION_ACCEPTED', // Consider if Go uses this exact string or a generic status update
+  APPLICATION_REJECTED = 'APPLICATION_REJECTED',
+  APPLICATION_WITHDRAWN = 'APPLICATION_WITHDRAWN',
+  APPLICATION_COMPLETED = 'APPLICATION_COMPLETED',
+  APPLICATION_STATUS_CHANGED = 'VOLUNTEER_APPLICATION_STATUS_UPDATE', // Change to match Go's case
+  OPPORTUNITY_CREATED = 'VOLUNTEER_NEW_MATCHING_OPPORTUNITY', // Change to match Go's case
+  OPPORTUNITY_UPDATED = 'OPPORTUNITY_UPDATED', // Go will need a case for this
+  OPPORTUNITY_DELETED = 'OPPORTUNITY_DELETED', // Go will need a case for this
 }

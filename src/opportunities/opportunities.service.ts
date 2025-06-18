@@ -25,8 +25,8 @@ import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
 
 @Injectable()
 export class OpportunitiesService {
+  private readonly logger = new Logger(OpportunitiesService.name);
   constructor(
-    private readonly logger = new Logger(OpportunitiesService.name),
     @InjectRepository(Opportunity)
     private opportunitiesRepository: Repository<Opportunity>,
     @InjectRepository(User)
