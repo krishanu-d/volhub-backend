@@ -404,7 +404,64 @@ export class ApplicationsService {
     }
 
     application.status = ApplicationStatus.WITHDRAWN;
-    return this.applicationsRepository.save(application);
+    const updatedApplication =
+      await this.applicationsRepository.save(application);
+
+    // --- Publish Notification Event for Withdrawal ---
+    try {
+      const volunteer = await this.usersRepository.findOne({
+        where: { id: volunteerId },
+      });
+      const opportunity = await this.opportunitiesRepository.findOne({
+        where: { id: application.opportunityId },
+        relations: ['ngo'], // Load NGO relation
+      });
+
+      if (volunteer && opportunity && opportunity.ngo) {
+        const ngoData = opportunity.ngo; // Get NGO data from the opportunity
+        const ngoRecipient: INotificationRecipient = {
+          user_id: ngoData.id.toString(), // Convert ID to string for consistency with Go
+          email_address: ngoData.email,
+          prefs: {
+            receive_email: ngoData.receiveEmailNotifications,
+            receive_push: ngoData.receivePushNotifications,
+          },
+        };
+
+        const notificationPayload: INotificationPayload = {
+          title: `Application Withdrawn for ${opportunity.title}`,
+          body: `Volunteer ${volunteer.name} has withdrawn their application.`,
+          subject: `Application Withdrawn: ${volunteer.name} for ${opportunity.title}`,
+          deep_link: `/ngo/opportunities/${opportunity.id}/applications/${updatedApplication.id}`,
+          application_id: updatedApplication.id,
+          old_status: ApplicationStatus.PENDING, // Assuming it was pending before withdrawal
+          new_status: updatedApplication.status,
+          opportunity_id: opportunity.id,
+          opportunity_title: opportunity.title,
+          volunteer_id: volunteer.id,
+          volunteer_name: volunteer.name,
+          ngo_id: ngoData.id,
+          ngo_name: ngoData.name,
+        };
+
+        await this.rabbitMQService.publishNotification(
+          RabbitMQRoutingKey.APPLICATION_STATUS_CHANGED, // Use the enum
+          RabbitMQEventType.APPLICATION_WITHDRAWN, // Use the enum
+          ngoRecipient,
+          notificationPayload,
+        );
+      } else {
+        this.logger.warn(
+          `Could not publish WITHDRAWAL event for Application ID ${updatedApplication.id}: missing related data.`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to publish WITHDRAWAL event for Application ID ${updatedApplication.id}: ${error.message}`,
+      );
+    }
+
+    return updatedApplication;
   }
 
   async findApplicantsByOpportunityId(
