@@ -71,6 +71,16 @@ export class CreateUserDto {
   role?: UserRole | null;
 
   @ApiProperty({
+    description: 'Firebase Cloud Messaging Device Token',
+    example: 'fcm_token_example',
+    nullable: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
+
+  @ApiProperty({
     description:
       'Categories the user is interested in (Volunteer) or focuses on (NGO)',
     type: [String],

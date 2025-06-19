@@ -22,6 +22,9 @@ import {
 } from 'src/enums';
 import { User } from 'src/users/entities/user.entity';
 import { RabbitMQService } from 'src/rabbitmq/rabbitmq.service';
+import { DeleteOpportunityDto } from './dto/delete-opportunity.dto';
+import { ApplicationsService } from 'src/applications/applications.service';
+import { INotificationRecipient } from 'src/rabbitmq/notification-message.interface';
 
 @Injectable()
 export class OpportunitiesService {
@@ -31,6 +34,7 @@ export class OpportunitiesService {
     private opportunitiesRepository: Repository<Opportunity>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    private readonly applicationsService: ApplicationsService, // Inject the ApplicationsService for application-related operations
     private readonly rabbitMQService: RabbitMQService, // Inject the RabbitMQService
   ) {}
 
@@ -41,28 +45,6 @@ export class OpportunitiesService {
       this.opportunitiesRepository.create(createOpportunityDto);
     const savedOpportunity =
       await this.opportunitiesRepository.save(opportunity);
-
-    // --- Publish Notification Event: New Opportunity Created ---
-    try {
-      // The Go service will handle finding relevant volunteers based on categories/subscriptions
-      await this.rabbitMQService.publish(
-        RabbitMQRoutingKey.OPPORTUNITY_CREATED, // Routing key for new opportunities
-        {
-          type: RabbitMQEventType.OPPORTUNITY_CREATED,
-          opportunityId: savedOpportunity.id,
-          opportunityTitle: savedOpportunity.title,
-          opportunityCategories: savedOpportunity.categories, // Include categories for matching
-          opportunityLatitude: savedOpportunity.latitude,
-          opportunityLongitude: savedOpportunity.longitude,
-          ngoId: savedOpportunity.ngo.id,
-          ngoName: savedOpportunity.ngo.name,
-        },
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to publish NEW_OPPORTUNITY event for Opportunity ID ${savedOpportunity.id}: ${error.message}`,
-      );
-    }
 
     return savedOpportunity;
   }
@@ -283,7 +265,7 @@ export class OpportunitiesService {
   async update(
     id: number,
     updateOpportunityDto: UpdateOpportunityDto,
-    ngoUser: User,
+    ngoUserId: number,
   ): Promise<Opportunity> {
     const opportunity = await this.opportunitiesRepository.findOne({
       where: { id },
@@ -294,7 +276,7 @@ export class OpportunitiesService {
       throw new NotFoundException(`Opportunity with ID ${id} not found.`);
     }
 
-    if (opportunity.ngo.id !== ngoUser.id) {
+    if (opportunity.ngo.id !== ngoUserId) {
       throw new BadRequestException(
         'You are not authorized to update this opportunity.',
       );
@@ -304,32 +286,74 @@ export class OpportunitiesService {
     const updatedOpportunity =
       await this.opportunitiesRepository.save(opportunity);
 
-    // --- Publish Notification Event: Opportunity Updated ---
+    // --- NEW: Fetch all volunteers who applied to this opportunity ---
     try {
-      // The Go service will handle finding relevant volunteers based on categories/subscriptions
-      await this.rabbitMQService.publish(
-        RabbitMQRoutingKey.OPPORTUNITY_UPDATED, // Routing key for updated opportunities
-        {
-          type: RabbitMQEventType.OPPORTUNITY_UPDATED,
-          opportunityId: updatedOpportunity.id,
-          opportunityTitle: updatedOpportunity.title,
-          opportunityCategories: updatedOpportunity.categories, // Include categories for matching
-          opportunityLatitude: updatedOpportunity.latitude,
-          opportunityLongitude: updatedOpportunity.longitude,
-          ngoId: updatedOpportunity.ngo.id,
-          ngoName: updatedOpportunity.ngo.name,
-        },
+      const applications =
+        await this.applicationsService.findApplicantsByOpportunityId(
+          id,
+          updatedOpportunity.ngo.id, // Pass ngoId if needed by findApplicantsByOpportunityId
+        );
+      this.logger.log(
+        `Found ${applications.length} applicants for updated opportunity ID ${id}.`,
       );
+
+      const recipients: INotificationRecipient[] = [];
+      for (const app of applications) {
+        // Ensure 'volunteer' relation is loaded or app directly has volunteer details
+        // Adjust based on your actual `Application` entity and what `findApplicantsByOpportunityId` returns
+        if (app) {
+          // Assuming application includes a ' relation
+          recipients.push({
+            user_id: app.id.toString(),
+            email_address: app.email,
+            device_token: app.fcmToken, // Ensure this field exists
+            prefs: {
+              receive_email: app.receiveEmailNotifications, // Ensure this field exists
+              receive_push: app.receivePushNotifications, // Ensure this field exists
+            },
+          });
+        }
+      }
+
+      // --- Publish Notification Event for EACH Recipient ---
+      for (const recipient of recipients) {
+        await this.rabbitMQService.publishNotification(
+          RabbitMQRoutingKey.OPPORTUNITY_UPDATED, // Routing key for updated opportunities
+          RabbitMQEventType.OPPORTUNITY_UPDATED, // Event type
+          recipient,
+          {
+            title: `Opportunity Update: ${updatedOpportunity.title}`,
+            body: `The opportunity "${updatedOpportunity.title}" you applied for has been updated by ${updatedOpportunity.ngo.name || updatedOpportunity.ngo.email}. Check for new details!`,
+            subject: `Important Update: ${updatedOpportunity.title}`,
+            deep_link: `/opportunities/details/${updatedOpportunity.id}`,
+            opportunity_id: updatedOpportunity.id,
+            opportunity_title: updatedOpportunity.title,
+            ngo_id: updatedOpportunity.ngo.id,
+            ngo_name:
+              updatedOpportunity.ngo.name || updatedOpportunity.ngo.email,
+            // You might add specific updated fields if `UpdateOpportunityDto` allows you to track changes.
+            // For example: updated_fields: Object.keys(updateOpportunityDto).join(', ')
+          },
+        );
+        this.logger.log(
+          `Published UPDATE notification for Volunteer ${recipient.user_id} for opportunity ${updatedOpportunity.id}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to publish UPDATE_OPPORTUNITY event for Opportunity ID ${updatedOpportunity.id}: ${error.message}`,
+        error.stack,
       );
     }
 
     return updatedOpportunity;
   }
 
-  async remove(id: number, ngoUser: User): Promise<void> {
+  async remove(
+    id: number,
+    ngoUserId: number,
+    deleteOpportunityDto: DeleteOpportunityDto,
+  ): Promise<void> {
     const opportunity = await this.opportunitiesRepository.findOne({
       where: { id },
       relations: ['ngo'],
@@ -339,33 +363,66 @@ export class OpportunitiesService {
       throw new NotFoundException(`Opportunity with ID ${id} not found.`);
     }
 
-    if (opportunity.ngo.id !== ngoUser.id) {
+    if (opportunity.ngoId !== ngoUserId) {
       throw new BadRequestException(
         'You are not authorized to delete this opportunity.',
       );
     }
+    console.log('opportunity,', opportunity.id);
+    // --- Fetch all volunteers who applied to this opportunity ---
+    const applications =
+      await this.applicationsService.findApplicantsByOpportunityId(
+        id,
+        opportunity.ngoId,
+      );
+    console.log('Applications found for opportunity:', applications.length);
+    const recipients: INotificationRecipient[] = [];
+    for (const app of applications) {
+      // Make sure 'volunteer' relation is loaded in the 'applications' array
+      // by your findApplicantsByOpportunityId method.
+      if (app) {
+        // Ensure the volunteer object exists on the application
+        recipients.push({
+          user_id: app.id.toString(), // CORRECT: Use app.volunteer.id
+          email_address: app.email, // CORRECT: Use app.volunteer.email
+          device_token: app.fcmToken, // CORRECT: Use app.volunteer.fcmToken
+          prefs: {
+            // These preferences should ideally come from the volunteer's actual user settings,
+            // e.g., app.volunteer.receiveEmailNotifications or app.volunteer.receivePushNotifications
+            // For now, defaulting to true as in your example:
+            receive_email: app.receiveEmailNotifications,
+            receive_push: app.receivePushNotifications,
+          },
+        });
+      } else {
+        console.warn(
+          `Volunteer data missing for an application. Skipping notification for this application.`,
+        );
+      }
+    }
 
-    // --- Publish Notification Event: Opportunity Deleted ---
-    try {
-      // The Go service will handle finding relevant volunteers based on categories/subscriptions
-      await this.rabbitMQService.publish(
-        RabbitMQRoutingKey.OPPORTUNITY_DELETED, // Routing key for new opportunities
+    for (const recipient of recipients) {
+      await this.rabbitMQService.publishNotification(
+        RabbitMQRoutingKey.OPPORTUNITY_DELETED,
+        RabbitMQEventType.OPPORTUNITY_DELETED,
+        recipient,
         {
-          type: RabbitMQEventType.OPPORTUNITY_DELETED,
-          opportunityId: opportunity.id,
-          opportunityTitle: opportunity.title,
-          opportunityCategories: opportunity.categories, // Include categories for matching
-          opportunityLatitude: opportunity.latitude,
-          opportunityLongitude: opportunity.longitude,
-          ngoId: opportunity.ngo.id,
-          ngoName: opportunity.ngo.name,
+          title: `Opportunity Canceled: ${opportunity.title}`,
+          body: `The opportunity "${opportunity.title}" you applied for has been canceled by ${opportunity.ngo.name || opportunity.ngo.email} for the following reason: ${deleteOpportunityDto.reason}. We apologize for any inconvenience.`, // CORRECT: Using firstName or email for NGO name
+          subject: `Opportunity Canceled: ${opportunity.title}`,
+          deep_link: `/opportunities/deleted/${opportunity.id}`,
+          opportunity_id: opportunity.id,
+          opportunity_title: opportunity.title,
+          ngo_id: opportunity.ngo.id,
+          ngo_name: opportunity.ngo.name || opportunity.ngo.email, // CORRECT: Using firstName or email for NGO name
+          deletion_reason: deleteOpportunityDto.reason,
         },
       );
-    } catch (error) {
-      this.logger.error(
-        `Failed to publish DELETE_OPPORTUNITY event for Opportunity ID ${opportunity.id}: ${error.message}`,
-      );
     }
+
+    console.log('Recipients for notification:', recipients);
+
+    // --- Publish Notification Event: Opportunity Deleted ---
 
     await this.opportunitiesRepository.delete(id);
   }

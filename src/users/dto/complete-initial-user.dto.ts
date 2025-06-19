@@ -95,4 +95,14 @@ export class CompleteInitialProfileDto {
   @IsOptional()
   @IsBoolean()
   receiveEmailNotifications?: boolean;
+
+  @ApiProperty({
+    description: 'Firebase Cloud Messaging Device Token',
+    example: 'fcm_token_example',
+    nullable: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
 }

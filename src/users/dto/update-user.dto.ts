@@ -91,4 +91,14 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   receiveEmailNotifications?: boolean;
+
+  @ApiProperty({
+    description: 'Firebase Cloud Messaging Device Token',
+    example: 'fcm_token_example',
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
 }

@@ -149,6 +149,14 @@ export class User {
   @Column({ type: 'boolean', default: true })
   receiveEmailNotifications: boolean; // True by default
 
+  @ApiProperty({
+    description: 'Firebase Cloud Messaging Device Token',
+    example: 'fcm_token_example',
+    nullable: true,
+  })
+  @Column({ nullable: true, type: 'text', unique: true })
+  fcmToken?: string; // Firebase Cloud Messaging Device Token
+
   // Existing relationship for NGOs to opportunities
   @ApiProperty({ type: () => Opportunity })
   @OneToMany(() => Opportunity, (opportunity) => opportunity.ngo, {

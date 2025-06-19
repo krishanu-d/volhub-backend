@@ -69,7 +69,9 @@ export class Application {
     type: () => Opportunity,
     description: 'The opportunity this application is for',
   })
-  @ManyToOne(() => Opportunity, (opportunity) => opportunity.applications)
+  @ManyToOne(() => Opportunity, (opportunity) => opportunity.applications, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'opportunityId' }) // Specify the foreign key column
   opportunity: Opportunity;
 }

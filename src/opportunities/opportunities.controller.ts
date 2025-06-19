@@ -30,6 +30,7 @@ import { FindOpportunitiesQueryDto } from './dto/find-opportunities-query.dto';
 import { UserRole } from 'src/enums';
 import { User } from 'src/users/entities/user.entity';
 import { ApplicationsService } from 'src/applications/applications.service';
+import { DeleteOpportunityDto } from './dto/delete-opportunity.dto';
 
 @ApiTags('opportunities')
 @ApiBearerAuth()
@@ -139,8 +140,13 @@ export class OpportunitiesController {
   remove(
     @Param('id') id: string,
     @Req() req, // Add @Req() req here
+    @Body(new ValidationPipe()) deleteOpportunityDto: DeleteOpportunityDto, // Ensure reason is provided
   ) {
-    return this.opportunitiesService.remove(+id, req.user.id); // Pass req.user.id to service
+    return this.opportunitiesService.remove(
+      +id,
+      req.user.id,
+      deleteOpportunityDto,
+    ); // Pass req.user.id to service
   }
 
   @Get(':opportunityId/applicants')
